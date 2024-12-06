@@ -14,7 +14,7 @@ import cv2
 import zipfile
 import traceback
 import threading
-import threading
+import requests
 
 from typing import Union, Any
 from contextlib import nullcontext
@@ -197,23 +197,41 @@ def is_video(video_path: str) -> bool:
 
 
 def conditional_download(download_directory_path: str, urls: List[str]) -> None:
-    if not os.path.exists(download_directory_path):
-        os.makedirs(download_directory_path)
+    # Ensure the download directory exists
+    os.makedirs(download_directory_path, exist_ok=True)
+
     for url in urls:
-        download_file_path = os.path.join(
-            download_directory_path, os.path.basename(url)
-        )
-        if not os.path.exists(download_file_path):
-            request = urllib.request.urlopen(url)  # type: ignore[attr-defined]
-            total = int(request.headers.get("Content-Length", 0))
-            with tqdm(
-                total=total,
-                desc=f"Downloading {url}",
+        try:
+            file_name = os.path.basename(url)
+            download_file_path = os.path.join(download_directory_path, file_name)
+            
+            # Skip if the file already exists
+            if os.path.exists(download_file_path):
+                print(f"File already exists: {download_file_path}, skipping...")
+                continue
+
+            # Start the download
+            response = requests.get(url, stream=True)
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            
+            total_size = int(response.headers.get('Content-Length', 0))
+            with open(download_file_path, 'wb') as file, tqdm(
+                total=total_size,
+                desc=f"Downloading {file_name}",
                 unit="B",
                 unit_scale=True,
                 unit_divisor=1024,
             ) as progress:
-                urllib.request.urlretrieve(url, download_file_path, reporthook=lambda count, block_size, total_size: progress.update(block_size))  # type: ignore[attr-defined]
+                for chunk in response.iter_content(chunk_size=1024):
+                    file.write(chunk)
+                    progress.update(len(chunk))
+            
+            print(f"Downloaded successfully: {download_file_path}")
+        
+        except requests.exceptions.RequestException as e:
+            print(f"Error downloading {url}: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
 
 
 def get_local_files_from_folder(folder: str) -> List[str]:

@@ -12,4 +12,5 @@ temp
 config.yaml
 run.bat
 venv
+.venv
 start.sh
